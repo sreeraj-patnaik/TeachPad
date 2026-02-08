@@ -1,0 +1,28 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>Drawing Tablet</title>
+    <link rel="stylesheet" href="{% static 'tablet/css/tablet.css' %}">
+</head>
+<body class="phone-page">
+    <div id="toolbar">
+        <input type="color" id="colorPicker" value="#000000" title="Color">
+        <label>
+            Size <input type="range" id="sizeSlider" min="1" max="40" value="4">
+        </label>
+        <button type="button" id="penBtn" class="active">Pen</button>
+        <button type="button" id="eraserBtn">Eraser</button>
+        <button type="button" id="moveBtn">Move</button>
+        <label>
+            Zoom <input type="range" id="zoomSlider" min="25" max="400" value="100">
+            <span id="zoomValue">100%</span>
+        </label>
+        <button type="button" id="resetCamBtn">Reset</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script src="{% static 'tablet/js/phone.js' %}"></script>
+</body>
+</html>
