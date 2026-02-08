@@ -1,22 +1,26 @@
 /**
- * Display: fullscreen 16:9 board. World is fixed 1920×1080; scale to fit.
- * Stroke size in world units so thickness is consistent regardless of phone zoom.
+ * Display: fullscreen 16:9 board. Multiple boards (slides); show current board.
  */
-
 (function () {
     'use strict';
 
     const WORLD_W = 1920;
     const WORLD_H = 1080;
+    const NUM_BOARDS = 10;
+    const ERASER_MIN_SIZE = 12;
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
 
-    const queue = [];
-    let lastPoint = null;
-    let backgroundDrawn = false;
+    const strokesByBoard = [];
+    const currentStrokeByBoard = [];
+    let currentDisplayBoard = 0;
 
-    // After resize: scale and offset so world [0,WORLD_W] x [0,WORLD_H] fits (letterbox)
+    for (let i = 0; i < NUM_BOARDS; i++) {
+        strokesByBoard.push([]);
+        currentStrokeByBoard.push(null);
+    }
+
     let scale = 1;
     let offsetX = 0;
     let offsetY = 0;
@@ -30,7 +34,31 @@
         socket.onmessage = function (event) {
             try {
                 const msg = JSON.parse(event.data);
-                if (msg.type === 'draw') queue.push(msg);
+                if (msg.type === 'set_board') {
+                    currentDisplayBoard = Math.max(0, Math.min(NUM_BOARDS - 1, parseInt(msg.board, 10) || 0));
+                    return;
+                }
+                if (msg.type !== 'draw') return;
+                const b = Math.max(0, Math.min(NUM_BOARDS - 1, parseInt(msg.board, 10) || 0));
+                const strokes = strokesByBoard[b];
+                let currentStroke = currentStrokeByBoard[b];
+                const x = clampWorldX(msg.x);
+                const y = clampWorldY(msg.y);
+                const drawing = msg.drawing === true;
+                const strokeTool = msg.tool || 'pen';
+                const strokeColor = msg.color || '#000000';
+                const strokeSize = strokeTool === 'eraser' ? Math.max(ERASER_MIN_SIZE, msg.size || 4) : Math.max(1, msg.size || 4);
+                if (drawing) {
+                    if (!currentStroke || currentStroke.tool !== strokeTool || currentStroke.color !== strokeColor || currentStroke.size !== strokeSize) {
+                        if (currentStroke && currentStroke.points.length > 0) strokes.push(currentStroke);
+                        currentStroke = { tool: strokeTool, color: strokeColor, size: strokeSize, points: [] };
+                    }
+                    currentStroke.points.push({ x: x, y: y });
+                    currentStrokeByBoard[b] = currentStroke;
+                } else {
+                    if (currentStroke && currentStroke.points.length > 0) strokes.push(currentStroke);
+                    currentStrokeByBoard[b] = null;
+                }
             } catch (_) {}
         };
         socket.onclose = function () { setTimeout(connect, 2000); };
@@ -52,7 +80,6 @@
         scale = fitScale;
         offsetX = (w - WORLD_W * scale) / 2;
         offsetY = (h - WORLD_H * scale) / 2;
-        backgroundDrawn = false;
     }
     window.addEventListener('resize', resize);
     resize();
@@ -65,12 +92,8 @@
         ctx.strokeRect(offsetX, offsetY, WORLD_W * scale, WORLD_H * scale);
     }
 
-    // Transform world coords to display pixels (used for drawing)
     function worldToDisplay(x, y) {
-        return {
-            x: offsetX + x * scale,
-            y: offsetY + y * scale,
-        };
+        return { x: offsetX + x * scale, y: offsetY + y * scale };
     }
 
     function worldSizeToDisplay(s) {
@@ -80,61 +103,62 @@
     function clampWorldX(x) { return Math.max(0, Math.min(WORLD_W, Number(x) || 0)); }
     function clampWorldY(y) { return Math.max(0, Math.min(WORLD_H, Number(y) || 0)); }
 
-    function applyMessage(msg) {
-        const x = clampWorldX(msg.x);
-        const y = clampWorldY(msg.y);
-        const drawing = msg.drawing === true;
-        const tool = msg.tool || 'pen';
-        const color = msg.color || '#000000';
-        const size = Math.max(1, msg.size || 4);
-        const dSize = worldSizeToDisplay(size);
-
-        if (tool === 'eraser') {
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.strokeStyle = 'rgba(0,0,0,1)';
-        } else {
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.strokeStyle = color;
-        }
-        ctx.lineWidth = dSize;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        const p = worldToDisplay(x, y);
-
-        if (drawing && lastPoint) {
-            const p0 = worldToDisplay(lastPoint.x, lastPoint.y);
-            ctx.beginPath();
-            ctx.moveTo(p0.x, p0.y);
-            ctx.lineTo(p.x, p.y);
-            ctx.stroke();
-        } else if (drawing) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, dSize / 2, 0, Math.PI * 2);
-            if (tool === 'eraser') {
+    function drawStrokesForBoard(boardIndex) {
+        const strokes = strokesByBoard[boardIndex];
+        for (let i = 0; i < strokes.length; i++) {
+            const s = strokes[i];
+            const pts = s.points;
+            if (pts.length < 2) continue;
+            if (s.tool === 'eraser') {
                 ctx.globalCompositeOperation = 'destination-out';
-                ctx.fillStyle = 'rgba(0,0,0,1)';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
-                ctx.fillStyle = color;
+                ctx.strokeStyle = s.color;
             }
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
+            ctx.lineWidth = worldSizeToDisplay(s.size);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            const p0 = worldToDisplay(pts[0].x, pts[0].y);
+            ctx.moveTo(p0.x, p0.y);
+            for (let j = 1; j < pts.length; j++) {
+                const p = worldToDisplay(pts[j].x, pts[j].y);
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
         }
+        ctx.globalCompositeOperation = 'source-over';
 
-        if (drawing) {
-            lastPoint = { x, y, tool, color, size };
-        } else {
-            lastPoint = null;
+        const currentStroke = currentStrokeByBoard[boardIndex];
+        if (currentStroke && currentStroke.points.length > 0) {
+            const s = currentStroke;
+            const pts = s.points;
+            if (s.tool === 'eraser') {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = s.color;
+            }
+            ctx.lineWidth = worldSizeToDisplay(s.size);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            const p0 = worldToDisplay(pts[0].x, pts[0].y);
+            ctx.moveTo(p0.x, p0.y);
+            for (let j = 1; j < pts.length; j++) {
+                const p = worldToDisplay(pts[j].x, pts[j].y);
+                ctx.lineTo(p.x, p.y);
+            }
+            ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
         }
     }
 
     function tick() {
-        if (!backgroundDrawn) {
-            drawBoardBackground();
-            backgroundDrawn = true;
-        }
-        while (queue.length > 0) applyMessage(queue.shift());
+        drawBoardBackground();
+        drawStrokesForBoard(currentDisplayBoard);
         requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);

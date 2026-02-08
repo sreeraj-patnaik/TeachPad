@@ -1,12 +1,14 @@
 /**
- * Phone: one fixed 16:9 board only. See same strokes as laptop. Pan/zoom within 16:9.
+ * Phone: fixed 16:9 board, full-screen view. Multiple boards (slides). Pan/zoom per board.
  */
 (function () {
     'use strict';
 
     const WORLD_W = 1920;
     const WORLD_H = 1080;
+    const NUM_BOARDS = 10;
     const TOOLBAR_H = 52;
+    const ERASER_MIN_SIZE = 12;
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -18,11 +20,15 @@
     const zoomSlider = document.getElementById('zoomSlider');
     const zoomValue = document.getElementById('zoomValue');
     const resetCamBtn = document.getElementById('resetCamBtn');
+    const prevBoardBtn = document.getElementById('prevBoardBtn');
+    const nextBoardBtn = document.getElementById('nextBoardBtn');
+    const boardLabel = document.getElementById('boardLabel');
 
     let camX = WORLD_W / 2;
     let camY = WORLD_H / 2;
     let zoom = 1;
 
+    // Full-screen: content area = entire canvas (maximize drawing area on phone)
     let contentWidth = 1;
     let contentHeight = 1;
     let contentLeft = 0;
@@ -45,9 +51,16 @@
     let camStartX = 0;
     let camStartY = 0;
 
-    // Strokes received from WebSocket (and our own) – same 16:9 content on phone and laptop
-    let strokes = [];
-    let currentStroke = null;
+    let currentBoard = 0;
+    let strokesByBoard = [];
+    let currentStrokeByBoard = [];
+    let cameraByBoard = [];
+
+    for (let i = 0; i < NUM_BOARDS; i++) {
+        strokesByBoard.push([]);
+        currentStrokeByBoard.push(null);
+        cameraByBoard.push({ camX: WORLD_W / 2, camY: WORLD_H / 2, zoom: 1 });
+    }
 
     const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = wsScheme + '//' + window.location.host + '/ws/draw/';
@@ -58,19 +71,30 @@
         socket.onmessage = function (event) {
             try {
                 const msg = JSON.parse(event.data);
+                if (msg.type === 'set_board') {
+                    const b = Math.max(0, Math.min(NUM_BOARDS - 1, parseInt(msg.board, 10) || 0));
+                    return;
+                }
                 if (msg.type !== 'draw') return;
+                const b = Math.max(0, Math.min(NUM_BOARDS - 1, parseInt(msg.board, 10) || 0));
+                const strokes = strokesByBoard[b];
+                let currentStroke = currentStrokeByBoard[b];
                 const x = clampWorldX(msg.x);
                 const y = clampWorldY(msg.y);
                 const drawing = msg.drawing === true;
+                const strokeTool = msg.tool || 'pen';
+                const strokeColor = msg.color || '#000000';
+                const strokeSize = msg.tool === 'eraser' ? Math.max(ERASER_MIN_SIZE, msg.size || 4) : Math.max(1, msg.size || 4);
                 if (drawing) {
-                    if (!currentStroke || currentStroke.tool !== msg.tool || currentStroke.color !== (msg.color || '#000000') || currentStroke.size !== (msg.size || 4)) {
+                    if (!currentStroke || currentStroke.tool !== strokeTool || currentStroke.color !== strokeColor || currentStroke.size !== strokeSize) {
                         if (currentStroke && currentStroke.points.length > 0) strokes.push(currentStroke);
-                        currentStroke = { tool: msg.tool || 'pen', color: msg.color || '#000000', size: Math.max(1, msg.size || 4), points: [] };
+                        currentStroke = { tool: strokeTool, color: strokeColor, size: strokeSize, points: [] };
                     }
                     currentStroke.points.push({ x: x, y: y });
+                    currentStrokeByBoard[b] = currentStroke;
                 } else {
                     if (currentStroke && currentStroke.points.length > 0) strokes.push(currentStroke);
-                    currentStroke = null;
+                    currentStrokeByBoard[b] = null;
                 }
             } catch (_) {}
         };
@@ -90,19 +114,10 @@
     function updateContentArea() {
         const w = Math.max(1, canvas.width);
         const h = Math.max(1, canvas.height);
-        const targetRatio = WORLD_W / WORLD_H;
-        const actualRatio = w / h;
-        if (actualRatio >= targetRatio) {
-            contentHeight = h;
-            contentWidth = h * targetRatio;
-            contentLeft = (w - contentWidth) / 2;
-            contentTop = 0;
-        } else {
-            contentWidth = w;
-            contentHeight = w / targetRatio;
-            contentLeft = 0;
-            contentTop = (h - contentHeight) / 2;
-        }
+        contentLeft = 0;
+        contentTop = 0;
+        contentWidth = w;
+        contentHeight = h;
     }
 
     function resize() {
@@ -168,12 +183,37 @@
         return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
     }
 
+    function saveCamera() {
+        cameraByBoard[currentBoard] = { camX: camX, camY: camY, zoom: zoom };
+    }
+
+    function loadCamera() {
+        const c = cameraByBoard[currentBoard];
+        camX = c.camX;
+        camY = c.camY;
+        zoom = c.zoom;
+        zoomSlider.value = Math.round(zoom * 100);
+        zoomValue.textContent = Math.round(zoom * 100) + '%';
+    }
+
+    function goToBoard(index) {
+        if (index === currentBoard) return;
+        saveCamera();
+        currentBoard = Math.max(0, Math.min(NUM_BOARDS - 1, index));
+        loadCamera();
+        boardLabel.textContent = (currentBoard + 1) + ' / ' + NUM_BOARDS;
+        send({ type: 'set_board', board: currentBoard });
+    }
+
+    prevBoardBtn.addEventListener('click', function () { goToBoard(currentBoard - 1); });
+    nextBoardBtn.addEventListener('click', function () { goToBoard(currentBoard + 1); });
     resetCamBtn.addEventListener('click', function () {
         camX = WORLD_W / 2;
         camY = WORLD_H / 2;
         zoom = 1;
         zoomSlider.value = 100;
         zoomValue.textContent = '100%';
+        cameraByBoard[currentBoard] = { camX: camX, camY: camY, zoom: zoom };
     });
 
     colorPicker.addEventListener('input', function () { color = colorPicker.value; });
@@ -188,6 +228,10 @@
         clampCamera();
     });
 
+    function effectiveSize() {
+        return tool === 'eraser' ? Math.max(ERASER_MIN_SIZE, size) : size;
+    }
+
     function maybeSend(worldX, worldY, drawing) {
         const now = performance.now();
         if (drawing && lastSentWorld && (now - lastSentTime) < SEND_THROTTLE_MS) return;
@@ -195,7 +239,16 @@
         const x = clampWorldX(worldX);
         const y = clampWorldY(worldY);
         lastSentWorld = { x: x, y: y };
-        send({ type: 'draw', tool: tool, color: tool === 'pen' ? color : '#000000', size: size, x: x, y: y, drawing: drawing });
+        send({
+            type: 'draw',
+            board: currentBoard,
+            tool: tool,
+            color: tool === 'pen' ? color : '#000000',
+            size: effectiveSize(),
+            x: x,
+            y: y,
+            drawing: drawing
+        });
     }
 
     function drawPreviewDot(screenX, screenY) {
@@ -238,6 +291,7 @@
             ctx.stroke();
         }
 
+        const strokes = strokesByBoard[currentBoard];
         for (let i = 0; i < strokes.length; i++) {
             const s = strokes[i];
             const pts = s.points;
@@ -263,6 +317,7 @@
         }
         ctx.globalCompositeOperation = 'source-over';
 
+        const currentStroke = currentStrokeByBoard[currentBoard];
         if (currentStroke && currentStroke.points.length > 0) {
             const s = currentStroke;
             const pts = s.points;
@@ -290,7 +345,7 @@
     function loop() {
         drawBoardAndGridAndStrokes();
         if (lastPreviewScreenX >= 0 && lastPreviewScreenY >= 0) {
-            const radius = worldSizeToScreen(size);
+            const radius = worldSizeToScreen(effectiveSize());
             ctx.fillStyle = tool === 'eraser' ? '#fff' : color;
             ctx.beginPath();
             ctx.arc(lastPreviewScreenX, lastPreviewScreenY, radius, 0, Math.PI * 2);
@@ -365,4 +420,7 @@
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
     canvas.addEventListener('pointerleave', onPointerUp);
+
+    boardLabel.textContent = '1 / ' + NUM_BOARDS;
+    send({ type: 'set_board', board: 0 });
 })();

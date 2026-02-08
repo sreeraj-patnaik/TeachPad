@@ -9,17 +9,17 @@
 </head>
 <body class="phone-page">
     <div id="toolbar">
+        <div class="board-nav">
+            <button type="button" id="prevBoardBtn" title="Previous board">‹</button>
+            <span id="boardLabel">1 / 10</span>
+            <button type="button" id="nextBoardBtn" title="Next board">›</button>
+        </div>
         <input type="color" id="colorPicker" value="#000000" title="Color">
-        <label>
-            Size <input type="range" id="sizeSlider" min="1" max="40" value="4">
-        </label>
+        <label>Size <input type="range" id="sizeSlider" min="1" max="40" value="4"></label>
         <button type="button" id="penBtn" class="active">Pen</button>
         <button type="button" id="eraserBtn">Eraser</button>
         <button type="button" id="moveBtn">Move</button>
-        <label>
-            Zoom <input type="range" id="zoomSlider" min="25" max="400" value="100">
-            <span id="zoomValue">100%</span>
-        </label>
+        <label>Zoom <input type="range" id="zoomSlider" min="25" max="400" value="100"> <span id="zoomValue">100%</span></label>
         <button type="button" id="resetCamBtn">Reset</button>
     </div>
     <canvas id="canvas"></canvas>

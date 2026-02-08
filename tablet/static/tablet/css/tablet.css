@@ -38,6 +38,21 @@ body {
     color: #eee;
     border-bottom: 1px solid #333;
 }
+.phone-page #toolbar .board-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.phone-page #toolbar .board-nav button {
+    padding: 4px 10px;
+    font-size: 18px;
+    line-height: 1;
+}
+.phone-page #toolbar #boardLabel {
+    min-width: 48px;
+    text-align: center;
+    font-size: 13px;
+}
 .phone-page #toolbar label {
     display: inline-flex;
     align-items: center;
