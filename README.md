@@ -19,3 +19,4 @@ Phone browser = zoomable drawing tablet (input). Laptop browser = fullscreen dis
 - Django + Django Channels (WebSocket)
 - Redis channel layer
 - Vanilla HTML/CSS/JS; no React, no drawing libraries
+
