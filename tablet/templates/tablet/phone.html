@@ -1,4 +1,4 @@
-{% load static %}
+﻿{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,15 +10,21 @@
 <body class="phone-page">
     <div id="toolbar">
         <div class="board-nav">
-            <button type="button" id="prevBoardBtn" title="Previous board">‹</button>
+            <button type="button" id="prevBoardBtn" title="Previous board">&lt;</button>
             <span id="boardLabel">1 / 10</span>
-            <button type="button" id="nextBoardBtn" title="Next board">›</button>
+            <button type="button" id="nextBoardBtn" title="Next board">&gt;</button>
         </div>
         <input type="color" id="colorPicker" value="#000000" title="Color">
         <label>Size <input type="range" id="sizeSlider" min="1" max="40" value="4"></label>
         <button type="button" id="penBtn" class="active">Pen</button>
         <button type="button" id="eraserBtn">Eraser</button>
         <button type="button" id="moveBtn">Move</button>
+        <button type="button" id="selectBtn">Select</button>
+        <button type="button" id="addImageBtn">Add Image</button>
+        <input type="file" id="imageInput" accept="image/*" hidden>
+        <button type="button" id="undoBtn">Undo</button>
+        <button type="button" id="redoBtn">Redo</button>
+        <button type="button" id="clearBoardBtn">Clear</button>
         <label>Zoom <input type="range" id="zoomSlider" min="25" max="400" value="100"> <span id="zoomValue">100%</span></label>
         <button type="button" id="resetCamBtn">Reset</button>
     </div>
